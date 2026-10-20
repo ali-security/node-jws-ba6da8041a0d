@@ -55,25 +55,6 @@ function securedInputFromJWS(jwsSig) {
   return jwsSig.split('.', 2).join('.');
 }
 
-function algoFromJWS(jwsSig) {
-  var err;
-  const header = headerFromJWS(jwsSig);
-  if (typeof header != 'object') {
-    err = new Error("Invalid token: no header in signature '" + jwsSig + "'");
-    err.code = "MISSING_HEADER";
-    err.signature = jwsSig;
-    throw err;
-  }
-  if (!header.alg) {
-    err = new Error("Missing `alg` field in header for signature '"+ jwsSig +"'");
-    err.code = "MISSING_ALGORITHM";
-    err.header = header;
-    err.signature = jwsSig;
-    throw err;
-  }
-  return header.alg;
-}
-
 function signatureFromJWS(jwsSig) {
   return jwsSig.split('.')[2];
 }
@@ -92,11 +73,18 @@ function isValidJws(string) {
   return true;
 }
 
-function jwsVerify(jwsSig, secretOrKey) {
+function jwsVerify(jwsSig, algorithm, secretOrKey) {
+  if (!algorithm) {
+    var err = new Error("Missing algorithm parameter for jws.verify");
+    err.code = "MISSING_ALGORITHM";
+    throw err;
+  }
+  if (ALGORITHMS.indexOf(algorithm) === -1 && algorithm !== 'none')
+    throw new TypeError('"' + algorithm + '" is not a valid algorithm.');
   jwsSig = toString(jwsSig);
   const signature = signatureFromJWS(jwsSig);
   const securedInput = securedInputFromJWS(jwsSig);
-  const algo = jwa(algoFromJWS(jwsSig));
+  const algo = jwa(algorithm);
   return algo.verify(securedInput, signature, secretOrKey);
 }
 
@@ -154,6 +142,7 @@ function VerifyStream(opts) {
   const secretOrKey = opts.secret||opts.publicKey||opts.key;
   const secretStream = new DataStream(secretOrKey);
   this.readable = true;
+  this.algorithm = opts.algorithm;
   this.secret = this.publicKey = this.key = secretStream;
   this.signature = new DataStream(opts.signature);
   this.secret.once('close', function () {
@@ -168,7 +157,7 @@ function VerifyStream(opts) {
 }
 util.inherits(VerifyStream, Stream);
 VerifyStream.prototype.verify = function verify() {
-  const valid = jwsVerify(this.signature.buffer, this.key.buffer);
+  const valid = jwsVerify(this.signature.buffer, this.algorithm, this.key.buffer);
   const obj = jwsDecode(this.signature.buffer);
   this.emit('done', valid, obj);
   this.emit('data', valid);

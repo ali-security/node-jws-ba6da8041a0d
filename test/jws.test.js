@@ -40,7 +40,8 @@ const CURVES = {
 
 BITS.forEach(function (bits) {
   test('HMAC using SHA-'+bits+' hash algorithm', function (t) {
-    const header = { alg: 'HS'+bits, typ: 'JWT' };
+    const alg = 'HS'+bits;
+    const header = { alg: alg, typ: 'JWT' };
     const payload = {name: 'oh hey', value: ['one', 2, 3]};
     const secret = 'sup';
     const jwsObj = jws.sign({
@@ -49,8 +50,9 @@ BITS.forEach(function (bits) {
       secret: secret
     });
     const parts = jws.decode(jwsObj);
-    t.ok(jws.verify(jwsObj, secret), 'should verify');
-    t.notOk(jws.verify(jwsObj, 'something else'), 'should not verify');
+    t.ok(jws.verify(jwsObj, alg, secret), 'should verify');
+    t.notOk(jws.verify(jwsObj, alg, 'something else'), 'should not verify with non-matching secret');
+    t.notOk(jws.verify(jwsObj, 'RS'+bits, secret), 'should not verify with non-matching algorithm');
     t.same(parts.payload, payload, 'should match payload');
     t.same(parts.header, header, 'should match header');
     t.end();
@@ -59,7 +61,8 @@ BITS.forEach(function (bits) {
 
 BITS.forEach(function (bits) {
   test('RSASSA using SHA-'+bits+' hash algorithm', function (t) {
-    const header = { alg: 'RS'+bits };
+    const alg = 'RS'+bits;
+    const header = { alg: alg };
     const payload = {name: 'oh hey', value: ['one', 2, 3]};
     const privateKey = rsaPrivateKey;
     const publicKey = rsaPublicKey;
@@ -70,8 +73,9 @@ BITS.forEach(function (bits) {
       privateKey: privateKey
     });
     const parts = jws.decode(jwsObj, { json: true });
-    t.ok(jws.verify(jwsObj, publicKey), 'should verify');
-    t.notOk(jws.verify(jwsObj, wrongPublicKey), 'should not verify');
+    t.ok(jws.verify(jwsObj, alg, publicKey), 'should verify');
+    t.notOk(jws.verify(jwsObj, alg, wrongPublicKey), 'should not verify with non-matching public key');
+    t.notOk(jws.verify(jwsObj, 'HS'+bits, publicKey), 'should not verify with non-matching algorithm');
     t.same(parts.payload, payload, 'should match payload');
     t.same(parts.header, header, 'should match header');
     t.end();
@@ -81,7 +85,8 @@ BITS.forEach(function (bits) {
 BITS.forEach(function (bits) {
   const curve = CURVES[bits];
   test('ECDSA using P-'+curve+' curve and SHA-'+bits+' hash algorithm', function (t) {
-    const header = { alg: 'ES'+bits };
+    const alg = 'ES'+bits;
+    const header = { alg: alg };
     const payload = 'oh hey';
     const privateKey = ecdsaPrivateKey['256'];
     const publicKey = ecdsaPublicKey['256'];
@@ -92,8 +97,9 @@ BITS.forEach(function (bits) {
       privateKey: privateKey
     });
     const parts = jws.decode(jwsObj);
-    t.ok(jws.verify(jwsObj, publicKey), 'should verify');
-    t.notOk(jws.verify(jwsObj, wrongPublicKey), 'should not verify');
+    t.ok(jws.verify(jwsObj, alg, publicKey), 'should verify');
+    t.notOk(jws.verify(jwsObj, alg, wrongPublicKey), 'should not verify with non-matching public key');
+    t.notOk(jws.verify(jwsObj, 'HS'+bits, publicKey), 'should not verify with non-matching algorithm');
     t.same(parts.payload, payload, 'should match payload');
     t.same(parts.header, header, 'should match header');
     t.end();
@@ -101,15 +107,17 @@ BITS.forEach(function (bits) {
 });
 
 test('No digital signature or MAC value included', function (t) {
-  const header = { alg: 'none' };
+  const alg = 'none';
+  const header = { alg: alg };
   const payload = 'oh hey';
   const jwsObj = jws.sign({
     header: header,
     payload: payload,
   });
   const parts = jws.decode(jwsObj);
-  t.ok(jws.verify(jwsObj), 'should verify');
-  t.ok(jws.verify(jwsObj, 'anything'), 'should still verify');
+  t.ok(jws.verify(jwsObj, alg), 'should verify');
+  t.ok(jws.verify(jwsObj, alg, 'anything'), 'should still verify');
+  t.notOk(jws.verify(jwsObj, 'HS256', 'anything'), 'should not verify with non-matching algorithm');
   t.same(parts.payload, payload, 'should match payload');
   t.same(parts.header, header, 'should match header');
   t.end();
@@ -124,7 +132,7 @@ test('Streaming sign: HMAC', function (t) {
   });
   dataStream.pipe(sig.payload);
   sig.on('done', function (signature) {
-    t.ok(jws.verify(signature, secret), 'should verify');
+    t.ok(jws.verify(signature, 'HS256', secret), 'should verify');
     t.end();
   });
 });
@@ -144,8 +152,8 @@ test('Streaming sign: RSA', function (t) {
   });
 
   sig.on('done', function (signature) {
-    t.ok(jws.verify(signature, publicKey), 'should verify');
-    t.notOk(jws.verify(signature, wrongPublicKey), 'should not verify');
+    t.ok(jws.verify(signature, 'RS256', publicKey), 'should verify');
+    t.notOk(jws.verify(signature, 'RS256', wrongPublicKey), 'should not verify');
     t.same(jws.decode(signature).payload, readfile('data.txt'), 'got all the data');
     t.end();
   });
@@ -162,8 +170,8 @@ test('Streaming sign: RSA, predefined streams', function (t) {
     privateKey: privateKeyStream
   });
   sig.on('done', function (signature) {
-    t.ok(jws.verify(signature, publicKey), 'should verify');
-    t.notOk(jws.verify(signature, wrongPublicKey), 'should not verify');
+    t.ok(jws.verify(signature, 'RS256', publicKey), 'should verify');
+    t.notOk(jws.verify(signature, 'RS256', wrongPublicKey), 'should not verify');
     t.same(jws.decode(signature).payload, readfile('data.txt'), 'got all the data');
     t.end();
   });
@@ -178,7 +186,7 @@ test('Streaming verify: ECDSA', function (t) {
     payload: dataStream,
     privateKey: privateKeyStream
   });
-  const verifier = jws.createVerify();
+  const verifier = jws.createVerify({algorithm: 'ES512'});
   sigStream.pipe(verifier.signature);
   publicKeyStream.pipe(verifier.key);
   verifier.on('done', function (valid) {
@@ -197,6 +205,7 @@ test('Streaming verify: ECDSA, with invalid key', function (t) {
     privateKey: privateKeyStream
   });
   const verifier = jws.createVerify({
+    algorithm: 'ES512',
     signature: sigStream,
     publicKey: publicKeyStream,
   });
@@ -221,15 +230,117 @@ test('jws.decode: with a bogus header ', function (t) {
   t.end();
 });
 
-test('jws.decode: missing algo in header', function (t) {
+test('jws.verify: missing or invalid algorithm', function (t) {
   const header = Buffer('{"something":"not an algo"}').toString('base64');
   const payload = Buffer('sup').toString('base64');
   const sig = header + '.' + payload + '.';
-  try { jws.verify(sig, 'whatever') }
+  try { jws.verify(sig) }
   catch (e) {
     t.same(e.code, 'MISSING_ALGORITHM');
   }
+  try { jws.verify(sig, 'whatever') }
+  catch (e) {
+    t.ok(e.message.match('"whatever" is not a valid algorithm.'));
+  }
   t.end();
+});
+
+test('jws.verify: algorithm is required, not taken from the header', function (t) {
+  const jwsObj = jws.sign({
+    header: { alg: 'HS256' },
+    payload: 'oh hey',
+    secret: 'shhhhh'
+  });
+  var code = null;
+  try { jws.verify(jwsObj, null, 'shhhhh') }
+  catch (e) { code = e.code }
+  t.same(code, 'MISSING_ALGORITHM', 'should throw when no algorithm is given');
+  t.end();
+});
+
+test('jws.verify: HS256 token forged with the RSA public key', function (t) {
+  const legit = jws.sign({
+    header: { alg: 'RS256' },
+    payload: 'oh hey',
+    privateKey: rsaPrivateKey
+  });
+  const forged = jws.sign({
+    header: { alg: 'HS256' },
+    payload: 'forged',
+    secret: rsaPublicKey
+  });
+  t.ok(jws.verify(legit, 'RS256', rsaPublicKey), 'should verify a genuine RS256 token');
+  t.notOk(jws.verify(forged, 'RS256', rsaPublicKey), 'should not verify a token whose header switches to HS256');
+  t.end();
+});
+
+test('jws.verify: unsigned token with alg none', function (t) {
+  const forged = jws.sign({
+    header: { alg: 'none' },
+    payload: 'forged'
+  });
+  t.notOk(jws.verify(forged, 'RS256', rsaPublicKey), 'should not verify an unsigned token as RS256');
+  t.notOk(jws.verify(forged, 'HS256', 'shhhhh'), 'should not verify an unsigned token as HS256');
+  t.end();
+});
+
+test('jws.verify: algorithm must match exactly', function (t) {
+  const forged = jws.sign({
+    header: { alg: 'none' },
+    payload: 'forged'
+  });
+  var accepted = null;
+  var error = null;
+  try { accepted = jws.verify(forged, 'mynonesecret') }
+  catch (e) { error = e }
+  t.same(accepted, null, 'should not accept an unsigned token for a secret containing "none"');
+  t.ok(error instanceof TypeError, 'should throw a TypeError for "mynonesecret"');
+  t.ok(error && error.message.match('"mynonesecret" is not a valid algorithm.'), 'should report "mynonesecret" as an invalid algorithm');
+
+  const jwsObj = jws.sign({
+    header: { alg: 'HS256' },
+    payload: 'oh hey',
+    secret: 'shhhhh'
+  });
+  error = null;
+  try { jws.verify(jwsObj, 'hs256', 'shhhhh') }
+  catch (e) { error = e }
+  t.ok(error instanceof TypeError, 'should throw a TypeError for lowercase "hs256"');
+  t.ok(error && error.message.match('"hs256" is not a valid algorithm.'), 'should report "hs256" as an invalid algorithm');
+  t.end();
+});
+
+test('Streaming verify: HS256 token forged with the RSA public key', function (t) {
+  const forged = jws.sign({
+    header: { alg: 'HS256' },
+    payload: 'forged',
+    secret: rsaPublicKey
+  });
+  const verifier = jws.createVerify({
+    algorithm: 'RS256',
+    signature: forged,
+    publicKey: rsaPublicKey,
+  });
+  verifier.on('done', function (valid) {
+    t.notOk(valid, 'should not verify a token whose header switches to HS256');
+    t.end();
+  });
+});
+
+test('Streaming verify: unsigned token with alg none', function (t) {
+  const forged = jws.sign({
+    header: { alg: 'none' },
+    payload: 'forged'
+  });
+  const verifier = jws.createVerify({
+    algorithm: 'RS256',
+    signature: forged,
+    publicKey: rsaPublicKey,
+  });
+  verifier.on('done', function (valid) {
+    t.notOk(valid, 'should not verify an unsigned token as RS256');
+    t.end();
+  });
 });
 
 

@@ -1,0 +1,31 @@
+name: seal-build
+
+# Build-and-pack only: the test suite runs on Travis (.travis.yml).
+on:
+  workflow_dispatch:
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # The public tarball was packed with npm 1.4.x (Node 0.10 line), which
+      # ships .gitignore as .npmignore; modern npm does not.
+      - name: Install Node 0.10.48
+        run: |
+          curl -fsSL https://nodejs.org/dist/v0.10.48/node-v0.10.48-linux-x64.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/node-v0.10.48-linux-x64/bin" >> "$GITHUB_PATH"
+      - name: Pack
+        run: |
+          node --version
+          npm --version
+          rm -rf .github
+          npm pack
+          mkdir -p seal-out
+          mv jws-*.tgz seal-out/
+          tar tzvf seal-out/*.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jws-tgz
+          path: seal-out/*.tgz
